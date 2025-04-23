@@ -3,6 +3,7 @@ from aiogram.filters import CommandStart
 from keyboards import main_menu
 from recipes.models import Recipe, BotUser
 import random
+from aiogram.types import FSInputFile
 
 
 router = Router()
@@ -14,7 +15,10 @@ async def cmd_start(message: types.Message):
     user.username = message.from_user.username
     user.save()
     
-    await message.answer("Привет! Я бот FoodPlan и я помогу тебе найти рецепт по душе. Выбери опцию ниже 👇", reply_markup=main_menu)
+    await message.answer(
+        "Привет! Я бот FoodPlan и я помогу тебе найти рецепт по душе. Выбери опцию ниже 👇",
+        reply_markup=main_menu
+        )
 
 
 @router.message(F.text == "Случайный рецепт")
@@ -25,6 +29,9 @@ async def random_recipe(message: types.Message):
         return
     
     recipe = random.choice(recipes)
+    
+    image_path = recipe.image_url.path
+    image = FSInputFile(image_path)
     
     caption = f"<b>{recipe.title}</b>\n\n{recipe.description}"
     buttons= [
@@ -44,7 +51,7 @@ async def show_ingredients(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@router.callback_query(F.data.startwith("instructions_"))
+@router.callback_query(F.data.startswith("instructions_"))
 async def show_instructions(callback: types.CallbackQuery):
     recipe_id = int(callback.data.split("_")[1])
     recipe = Recipe.objects.get(id=recipe_id)
