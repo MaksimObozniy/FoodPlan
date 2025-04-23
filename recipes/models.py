@@ -3,7 +3,7 @@ from django.db import models
 class Recipe(models.Model):
     title = models.CharField(max_length=50, verbose_name="Название")
     description = models.TextField(verbose_name="Описание")
-    img_url = models.ImageField(upload_to="recipes_photo", verbose_name="Фото блюда")
+    img_url = models.ImageField(upload_to="recipes_photo/", verbose_name="Фото блюда")
     ingredients = models.TextField(verbose_name="Ингредиенты")
     instructions = models.TextField(verbose_name="Способ приготовления")
     
