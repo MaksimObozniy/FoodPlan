@@ -4,16 +4,16 @@ from keyboards import main_menu
 from recipes.models import Recipe, BotUser
 import random
 from aiogram.types import FSInputFile
-
+from asgiref.sync import sync_to_async
 
 router = Router()
 
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
-    user, created = BotUser.objects.get_or_create(telegram_id=message.from_user.id)
+    user, created = await sync_to_async(BotUser.objects.get_or_create)(telegram_id=message.from_user.id)
     user.username = message.from_user.username
-    user.save()
+    await sync_to_async(user.save)()
     
     await message.answer(
         "Привет! Я бот FoodPlan и я помогу тебе найти рецепт по душе. Выбери опцию ниже 👇",
@@ -23,13 +23,12 @@ async def cmd_start(message: types.Message):
 
 @router.message(F.text == "Случайный рецепт")
 async def random_recipe(message: types.Message):
-    recipes = Recipe.objects.all()
+    recipes = await sync_to_async(list)(Recipe.objects.all())
     if not recipes:
         await message.answer("В нашей рецептотеке нет рецептов :(")
         return
     
     recipe = random.choice(recipes)
-    
     image_path = recipe.image_url.path
     image = FSInputFile(image_path)
     
@@ -46,7 +45,8 @@ async def random_recipe(message: types.Message):
 @router.callback_query(F.data.startswith("ingredients_"))
 async def show_ingredients(callback: types.CallbackQuery):
     recipe_id = int(callback.data.split("_")[1])
-    recipe = Recipe.objects.get(id=recipe_id)
+    recipe = await sync_to_async(Recipe.objects.get)(id=recipe_id)
+    
     await callback.message.answer(f"<b>Что купить:</b>\n{recipe.ingredients}", parse_mode="HTML")
     await callback.answer()
 
@@ -54,22 +54,27 @@ async def show_ingredients(callback: types.CallbackQuery):
 @router.callback_query(F.data.startswith("instructions_"))
 async def show_instructions(callback: types.CallbackQuery):
     recipe_id = int(callback.data.split("_")[1])
-    recipe = Recipe.objects.get(id=recipe_id)
+    recipe = await sync_to_async(Recipe.objects.get)(id=recipe_id)
     await callback.message.answer(f"👨<b>Способ приготовления:</b>\n{recipe.instructions}", parse_mode="HTML")
     await callback.answer()
 
 
 @router.message(F.text == "Найти рецепт")
 async def ask_recipe_name(message: types.Message):
-    await message.answer("Введите название бляда для поиска")
+    await message.answer("Введите название блюда для поиска")
 
 
 @router.message()
 async def search_recipe(message: types.Message):
     query = message.text.lower()
-    matches = Recipe.objects.filter(title__icontains=query)
     
-    if matches.exists():
+    @sync_to_async
+    def get_mathes():
+        return list(Recipe.objects.filter(title__icontains=query))
+    
+    matches = await get_mathes()
+    
+    if matches:
         text = "Найдено:\n" + "\n".join([f"• {r.title}" for r in matches])
     else:
         text = "Ничего не найдено. Попробуйте другое название."
