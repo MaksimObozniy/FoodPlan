@@ -3,6 +3,7 @@ from aiogram.filters import CommandStart
 from keyboards import main_menu
 from recipes.models import Recipe
 import random
+import os
 from utils import check_and_use_access
 from aiogram.types import FSInputFile
 from asgiref.sync import sync_to_async
@@ -38,8 +39,9 @@ async def random_recipe(message: types.Message):
         return
     
     recipe = random.choice(recipes)
-    image_path = recipe.image_url.path
-    image = FSInputFile(image_path)
+    
+    photo_path = recipe.img_url.path 
+    photo = FSInputFile(photo_path)
     
     caption = f"<b>{recipe.title}</b>\n\n{recipe.description}"
     buttons= [
@@ -48,7 +50,7 @@ async def random_recipe(message: types.Message):
     ]
     markup = types.InlineKeyboardMarkup(inline_keyboard=buttons)
     
-    await message.answer_photo(photo=recipe.image_url, caption=caption, parse_mode="HTML", reply_markup=markup)
+    await message.answer_photo(photo=photo, caption=caption, parse_mode="HTML", reply_markup=markup)
 
     
 @router.callback_query(F.data.startswith("ingredients_"))
