@@ -12,13 +12,14 @@ django.setup()
 
 from aiogram import Bot, Dispatcher
 from handlers import router
+from aiogram.fsm.storage.memory import MemoryStorage
 
 
 load_dotenv()
 TOKEN = os.getenv('TG_BOT_TOKEN')
 
 bot = Bot(token=TOKEN)
-dp = Dispatcher()
+dp = Dispatcher(storage=MemoryStorage())
 dp.include_router(router)
 
 async def main():

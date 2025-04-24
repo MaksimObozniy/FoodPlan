@@ -1,12 +1,15 @@
 from aiogram import Router, types, F
 from aiogram.filters import CommandStart
-from keyboards import main_menu
+from keyboards import main_menu, get_recipes_keyboard
 from recipes.models import Recipe
 import random
 import os
+from states import SearchRecipe
 from utils import check_and_use_access
-from aiogram.types import FSInputFile
+from aiogram.types import FSInputFile, CallbackQuery
+from aiogram.fsm.context import FSMContext
 from asgiref.sync import sync_to_async
+
 
 router = Router()
 
@@ -66,28 +69,51 @@ async def show_ingredients(callback: types.CallbackQuery):
 async def show_instructions(callback: types.CallbackQuery):
     recipe_id = int(callback.data.split("_")[1])
     recipe = await sync_to_async(Recipe.objects.get)(id=recipe_id)
+    
     await callback.message.answer(f"👨<b>Способ приготовления:</b>\n{recipe.instructions}", parse_mode="HTML")
     await callback.answer()
 
 
 @router.message(F.text == "Найти рецепт")
-async def ask_recipe_name(message: types.Message):
-    await message.answer("Введите название блюда для поиска")
-
-
-@router.message()
-async def search_recipe(message: types.Message):
-    query = message.text.lower()
+async def ask_recipe_name(message: types.Message, state: FSMContext):
     
+    await state.set_state(SearchRecipe.waiting_for_recipe_name)
+    await message.answer("Введите название блюда для поиска:")
+
+
+@router.message(SearchRecipe.waiting_for_recipe_name)
+async def search_recipe(message: types.Message, state: FSMContext):
+
     @sync_to_async
-    def get_mathes():
-        return list(Recipe.objects.filter(title__icontains=query))
-    
-    matches = await get_mathes()
-    
+    def get_matches():
+        return list(Recipe.objects.filter(title__icontains=message.text))
+
+    matches = await get_matches()
+
     if matches:
-        text = "Найдено:\n" + "\n".join([f"• {r.title}" for r in matches])
+        await message.answer(f"Найдено рецептов: {len(matches)}", reply_markup=get_recipes_keyboard(matches))
     else:
-        text = "Ничего не найдено. Попробуйте другое название."
-        
-    await message.answer(text)
+        await message.answer("Ничего не найдено 😢")
+
+    await state.clear()
+
+
+@router.callback_query(F.data.startswith("recipe_"))
+async def send_recipe(callback: CallbackQuery):
+    recipe_id = int(callback.data.split("_")[1])
+
+    recipe = await sync_to_async(Recipe.objects.get)(id=recipe_id)
+
+    photo_path = recipe.img_url.path
+    photo = FSInputFile(photo_path)
+
+    caption = f"<b>{recipe.title}</b>\n\n{recipe.description}"
+
+    buttons = [
+        [types.InlineKeyboardButton(text="Что купить?", callback_data=f"ingredients_{recipe.id}")],
+        [types.InlineKeyboardButton(text="Способ приготовления", callback_data=f"instructions_{recipe.id}")],
+    ]
+    markup = types.InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    await callback.message.answer_photo(photo=photo, caption=caption, parse_mode="HTML", reply_markup=markup)
+    await callback.answer()
