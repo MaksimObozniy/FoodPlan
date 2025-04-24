@@ -9,6 +9,7 @@ from utils import check_and_use_access
 from aiogram.types import FSInputFile, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from asgiref.sync import sync_to_async
+from django.db.models.functions import Lower
 
 
 router = Router()
@@ -83,12 +84,20 @@ async def ask_recipe_name(message: types.Message, state: FSMContext):
 
 @router.message(SearchRecipe.waiting_for_recipe_name)
 async def search_recipe(message: types.Message, state: FSMContext):
+    access = await check_and_use_access(message.from_user.id, message.from_user.username)
+    if not access:
+        await message.answer("Вы исчерпали 3 бесплатных запроса на сегодня. Оформите подписку для неограниченного доступа.")
+        await state.clear()
+        return
 
     @sync_to_async
-    def get_matches():
-        return list(Recipe.objects.filter(title__icontains=message.text))
+    def get_matches(search_text: str):
+        return [
+            r for r in Recipe.objects.all()
+            if search_text.lower() in r.title.lower()
+        ]
 
-    matches = await get_matches()
+    matches = await get_matches(message.text)
 
     if matches:
         await message.answer(f"Найдено рецептов: {len(matches)}", reply_markup=get_recipes_keyboard(matches))

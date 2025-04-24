@@ -14,7 +14,7 @@ class BotUser(models.Model):
     telegram_id = models.BigIntegerField(unique=True, verbose_name="Telegram ID")
     username = models.CharField(max_length=255, null=True, blank=True, verbose_name="Username")
     is_subscribed = models.BooleanField(default=False, verbose_name="Подписка активна")
-    free_request_left = models.IntegerField(default=3, verbose_name="Осталось бесплатных подписок")
+    requests_today = models.IntegerField(default=0)
     last_request_date = models.DateField(null=True, blank=True, verbose_name="Дата последнего запроса")
     
     def reset_requests_if_new_day(self):
