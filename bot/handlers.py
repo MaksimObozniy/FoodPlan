@@ -1,8 +1,9 @@
 from aiogram import Router, types, F
 from aiogram.filters import CommandStart
 from keyboards import main_menu
-from recipes.models import Recipe, BotUser
+from recipes.models import Recipe
 import random
+from utils import check_and_use_access
 from aiogram.types import FSInputFile
 from asgiref.sync import sync_to_async
 
@@ -11,6 +12,7 @@ router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
+    from recipes.models import BotUser
     user, created = await sync_to_async(BotUser.objects.get_or_create)(telegram_id=message.from_user.id)
     user.username = message.from_user.username
     await sync_to_async(user.save)()
@@ -23,6 +25,13 @@ async def cmd_start(message: types.Message):
 
 @router.message(F.text == "Случайный рецепт")
 async def random_recipe(message: types.Message):
+    acces = await check_and_use_access(message.from_user.id, message.from_user.username)
+    if not acces:
+        await message.answer("Вы исчерпали 3 бесплатных запроса на сегодня. Оформите подписку для неограниченного доступа.")
+        return
+    
+    
+    
     recipes = await sync_to_async(list)(Recipe.objects.all())
     if not recipes:
         await message.answer("В нашей рецептотеке нет рецептов :(")

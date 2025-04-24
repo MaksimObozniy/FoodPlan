@@ -1,5 +1,5 @@
 from django.db import models
-
+from django.utils import timezone
 class Recipe(models.Model):
     title = models.CharField(max_length=50, verbose_name="Название")
     description = models.TextField(verbose_name="Описание")
@@ -15,6 +15,23 @@ class BotUser(models.Model):
     username = models.CharField(max_length=255, null=True, blank=True, verbose_name="Username")
     is_subscribed = models.BooleanField(default=False, verbose_name="Подписка активна")
     free_request_left = models.IntegerField(default=3, verbose_name="Осталось бесплатных подписок")
+    last_request_date = models.DateField(null=True, blank=True, verbose_name="Дата последнего запроса")
     
-    def __str__(self):
-        return f"{self.username or self.telegram_id}"
+    def reset_requests_if_new_day(self):
+        today = timezone.now().date()
+        if self.last_request_date != today:
+            self.free_request_left = 3
+            self.last_request_date = today
+            self.save()
+            
+    def try_use_feature(self) -> bool:
+        self.reset_requests_if_new_day()
+        
+        if self.is_subscribed:
+            return True
+
+        if self.free_request_left > 0:
+            self.free_request_left -= 1
+            self.save()
+            return True
+        return False
