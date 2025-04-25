@@ -11,7 +11,7 @@ django.setup()
 
 
 from aiogram import Bot, Dispatcher
-from handlers import router
+from handlers import router, payment_router
 from aiogram.fsm.storage.memory import MemoryStorage
 
 
@@ -21,6 +21,7 @@ TOKEN = os.getenv('TG_BOT_TOKEN')
 bot = Bot(token=TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 dp.include_router(router)
+dp.include_router(payment_router)
 
 async def main():
     await dp.start_polling(bot)

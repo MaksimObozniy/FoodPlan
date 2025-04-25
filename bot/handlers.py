@@ -1,19 +1,34 @@
 from aiogram import Router, types, F
 from aiogram.filters import CommandStart
-from keyboards import main_menu, get_recipes_keyboard
-from recipes.models import Recipe
+from keyboards import main_menu, get_recipes_keyboard, get_subscription_keyboard
+from recipes.models import Recipe, BotUser
 import random
 import os
 from states import SearchRecipe
 from utils import check_and_use_access
-from aiogram.types import FSInputFile, CallbackQuery
+from aiogram.types import (
+    Message, 
+    PreCheckoutQuery,
+    ContentType,
+    FSInputFile, 
+    CallbackQuery, 
+    LabeledPrice
+)
 from aiogram.fsm.context import FSMContext
 from asgiref.sync import sync_to_async
 from django.db.models.functions import Lower
+from datetime import timedelta
+from django.utils import timezone
 
 
 router = Router()
 
+
+SUBSCRIPTION_PRICE = 29900
+SUBSCRIPTION_DURATION = 30
+
+
+payment_router = Router()
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -28,11 +43,68 @@ async def cmd_start(message: types.Message):
         )
 
 
+@router.message(F.text == "Оформить подписку")
+async def offer_subscription(message: types.Message):
+    await message.answer(
+        "Премиум подписка дает неограниченный доступ ко всем рецептам!\n"
+        f"Стоимость: 299 руб / {SUBSCRIPTION_DURATION} дней\n\n"
+        "После оплаты подписка активируется автоматически.",
+        reply_markup=get_subscription_keyboard()
+    )
+
+
+@router.callback_query(F.data == "buy_subscription")
+async def buy_subscription(callback: types.CallbackQuery):
+    await callback.bot.send_invoice(
+        chat_id=callback.message.chat.id,
+        title="Премиум подписка FoodPlan",
+        description=f"Доступ ко всем рецептам на {SUBSCRIPTION_DURATION} дней",
+        payload="month_sub",
+        provider_token="1744374395:TEST:52fffc9e8301b69827ef",
+        currency="RUB",
+        prices=[LabeledPrice(label="Подписка", amount=SUBSCRIPTION_PRICE)],
+        start_parameter="month_sub",
+        photo_size=512,
+        need_email=True,
+        send_email_to_provider=True
+    )
+    await callback.answer()
+
+
+@payment_router.pre_checkout_query()
+async def process_pre_checkout_query(pre_checkout_query: PreCheckoutQuery):
+    await pre_checkout_query.answer(ok=True)
+
+
+@payment_router.message(F.content_type == ContentType.SUCCESSFUL_PAYMENT)
+async def process_successful_payment(message: types.Message):     
+    user, created = await sync_to_async(BotUser.objects.get_or_create)(
+        telegram_id=message.from_user.id,
+        defaults={'username': message.from_user.username}
+    )
+
+    user.is_subscribed = True
+    user.subscription_end = timezone.now() + timedelta(days=SUBSCRIPTION_DURATION)
+    await sync_to_async(user.save)()
+        
+    await message.answer(
+        "🎉 Подписка успешно активирована!\n"
+        f"Доступ открыт до {user.subscription_end.strftime('%d.%m.%Y')}"
+    )
+
+
 @router.message(F.text == "Случайный рецепт")
 async def random_recipe(message: types.Message):
-    acces = await check_and_use_access(message.from_user.id, message.from_user.username)
-    if not acces:
-        await message.answer("Вы исчерпали 3 бесплатных запроса на сегодня. Оформите подписку для неограниченного доступа.")
+    user = await sync_to_async(BotUser.objects.get)(telegram_id=message.from_user.id)
+    access = await sync_to_async(user.try_use_feature)()
+    # acces = await check_and_use_access(message.from_user.id, message.from_user.username)
+    if not access:
+        await message.answer(
+            "Вы исчерпали 3 бесплатных запроса на сегодня. Оформите подписку для неограниченного доступа.",
+            reply_markup=types.InlineKeyboardMarkup(inline_keyboard=[
+                [types.InlineKeyboardButton(text="Оформить подписку", callback_data="buy_subscription")]
+            ])
+        )
         return
     
     
